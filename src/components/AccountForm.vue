@@ -22,7 +22,7 @@
       <div>Пароль</div>
       <div></div> </div>
 
-    <div v-for="(acc, index) in store.accounts" :key="acc.id" class="account-row">
+    <div v-for="acc in store.accounts" :key="acc.id" class="account-row">
       
       <div class="grid-cell">
         <el-input
@@ -40,13 +40,14 @@
           v-model="acc.type" 
           @change="handleTypeChange(acc)"
           placeholder="Тип"
+          style="width: 100%"
         >
           <el-option label="LDAP" value="LDAP" />
           <el-option label="Локальная" value="Local" />
         </el-select>
       </div>
 
-      <div class="grid-cell">
+      <div class="grid-cell" :class="{ 'double-width': acc.type === 'LDAP' }">
         <el-input
           v-model="acc.login"
           placeholder="Логин"
@@ -57,19 +58,17 @@
         <div v-if="acc.isLoginValid === false" class="error-text">Обязательно, макс 100</div>
       </div>
 
-      <div class="grid-cell">
-        <div v-if="acc.type === 'Local'">
-          <el-input
-            v-model="acc.password"
-            type="password"
-            show-password
-            placeholder="Пароль"
-            @blur="validatePassword(acc)"
-            :class="{ 'is-error': acc.isPasswordValid === false }"
-            maxlength="100"
-          />
-          <div v-if="acc.isPasswordValid === false" class="error-text">Обязательно, макс 100</div>
-        </div>
+      <div class="grid-cell" v-if="acc.type === 'Local'">
+        <el-input
+          v-model="acc.password"
+          type="password"
+          show-password
+          placeholder="Пароль"
+          @blur="validatePassword(acc)"
+          :class="{ 'is-error': acc.isPasswordValid === false }"
+          maxlength="100"
+        />
+        <div v-if="acc.isPasswordValid === false" class="error-text">Обязательно, макс 100</div>
       </div>
 
       <div class="grid-cell action-cell">
@@ -91,6 +90,7 @@ import type { Account } from '@/types';
 
 const store = useAccountStore();
 
+// Инициализация данных из localStorage при загрузке
 onMounted(() => {
   store.init();
 });
@@ -99,39 +99,38 @@ const addAccount = () => {
   store.addAccount();
 };
 
-// --- Логика валидации и обработки ---
+// --- ЛОГИКА ---
 
-// 1. Обработка Меток (String -> Object Array)
+// Обработка меток: String -> Object Array
 const handleLabelBlur = (acc: Account) => {
-  // Валидация длины строки (хотя maxlength в input уже ограничивает ввод)
   if (acc._rawLabels.length > 50) {
     acc.isLabelValid = false;
     return;
   }
   acc.isLabelValid = true;
 
-  // Преобразование строки "a; b; c" -> [{text: 'a'}, {text: 'b'}]
+  // Разбиваем строку по ";" и убираем лишние пробелы
   const textArray = acc._rawLabels
     .split(';')
     .map(s => s.trim())
     .filter(s => s.length > 0);
 
+  // Сохраняем в стейт в нужном формате [{text: '...'}, ...]
   acc.labels = textArray.map(text => ({ text }));
 };
 
-// 2. Обработка смены типа
+// Смена типа аккаунта
 const handleTypeChange = (acc: Account) => {
   if (acc.type === 'LDAP') {
     acc.password = null;
-    acc.isPasswordValid = true; // Для LDAP пароль валиден всегда (его нет)
+    acc.isPasswordValid = true; // Пароль не нужен -> он валиден
   } else {
-    // Если переключили на Local, сбрасываем пароль в пустую строку, чтобы можно было ввести
     acc.password = ''; 
-    acc.isPasswordValid = false; // Сразу помечаем как невалидный, пока не введут
+    acc.isPasswordValid = false; // Нужно ввести пароль -> пока невалиден
   }
 };
 
-// 3. Валидация Логина
+// Валидация Логина
 const validateLogin = (acc: Account) => {
   if (!acc.login || acc.login.trim() === '' || acc.login.length > 100) {
     acc.isLoginValid = false;
@@ -140,9 +139,9 @@ const validateLogin = (acc: Account) => {
   }
 };
 
-// 4. Валидация Пароля
+// Валидация Пароля
 const validatePassword = (acc: Account) => {
-  if (acc.type === 'LDAP') return; // Не валидируем для LDAP
+  if (acc.type === 'LDAP') return; 
 
   if (!acc.password || acc.password.trim() === '' || acc.password.length > 100) {
     acc.isPasswordValid = false;
@@ -174,7 +173,7 @@ const validatePassword = (acc: Account) => {
   margin-bottom: 20px;
 }
 
-/* Сетка таблицы */
+/* --- СЕТКА ТАБЛИЦЫ --- */
 .form-grid {
   display: grid;
   grid-template-columns: 2fr 1.5fr 2fr 2fr 50px;
@@ -187,29 +186,61 @@ const validatePassword = (acc: Account) => {
   color: #606266;
   margin-bottom: 10px;
   padding: 0 10px;
+  // Скрываем заголовки на очень маленьких экранах
+  @media (max-width: 768px) {
+    display: none;
+  }
 }
 
 .account-row {
   @extend .form-grid;
   margin-bottom: 15px;
-  align-items: flex-start; // Чтобы инпуты были сверху, если появятся сообщения об ошибках
+  align-items: flex-start;
+  
+  // Адаптив для мобильных: превращаем строку в колонку
+  @media (max-width: 768px) {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #ebeef5;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1);
+  }
 }
 
+/* --- ЯЧЕЙКИ --- */
 .grid-cell {
   display: flex;
   flex-direction: column;
+  min-width: 0; // Важно для grid, чтобы контент не ломал сетку
+}
+
+/* Ключевой класс для LDAP: растягивает ячейку логина на 2 колонки (свою + пароля) */
+.double-width {
+  grid-column: span 2;
+  
+  @media (max-width: 768px) {
+    grid-column: auto; // На мобильных сбрасываем сетку
+    width: 100%;
+  }
 }
 
 .action-cell {
   align-items: center;
   justify-content: center;
-  height: 32px; // высота стандартного инпута, чтобы кнопка была по центру строки
+  height: 32px; // Центрируем кнопку по высоте инпутов
+  
+  @media (max-width: 768px) {
+    width: 100%;
+    margin-top: 10px;
+  }
 }
 
 .error-text {
   font-size: 12px;
   color: #f56c6c;
   margin-top: 4px;
+  line-height: 1.2;
 }
 
 .empty-state {
@@ -220,8 +251,7 @@ const validatePassword = (acc: Account) => {
   border-radius: 4px;
 }
 
-/* Красная обводка для Element Plus инпутов при ошибке */
-/* Используем deep selector, так как мы стилизуем внутренности компонента Element Plus */
+/* Кастомизация красной рамки ошибки для Element Plus */
 :deep(.is-error .el-input__wrapper) {
   box-shadow: 0 0 0 1px #f56c6c inset !important;
 }
